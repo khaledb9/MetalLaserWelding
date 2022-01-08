@@ -1,0 +1,169 @@
+# Code for modeling direct bonding using continous laser
+# Prepared by Khaled Badawy Nov 2020
+
+############################################################################################################################################################################################################
+
+# Initialize 
+
+units			metal
+dimension		3
+boundary 		f f f
+package 		gpu 8 neigh no
+
+############################################################################################################################################################################################################
+
+# Define Geometry
+
+shell    		cd ..
+shell			cd relax
+read_data		Relaxed.dat
+shell			cd ..
+shell     		cd 20
+
+lattice         fcc 3.6150	# For ATC
+
+# Atomistic system boundary to avoid losing atoms at high temps
+
+fix       		xwalls 	all wall/reflect ylo EDGE yhi EDGE zlo EDGE zhi EDGE xlo EDGE xhi EDGE
+
+############################################################################################################################################################################################################
+
+# Pair Potential
+
+pair_style 		eam/fs/gpu
+pair_coeff 		* * Cu1.eam.fs Cu
+
+############################################################################################################################################################################################################
+
+reset_timestep	0
+timestep		0.001
+
+# Get dimensions
+
+variable 	tmp  equal "xlo"
+variable	xo   equal ${tmp}
+variable 	tmp  equal "xhi"
+variable	x1   equal ${tmp}
+variable 	tmp  equal "ylo"
+variable	yo   equal ${tmp}
+variable 	tmp  equal "yhi"
+variable	y1   equal ${tmp}
+variable 	tmp  equal "zlo"
+variable	zo   equal ${tmp}
+variable 	tmp  equal "zhi"
+variable	z1   equal ${tmp}
+variable	rb   equal "v_xo + 30.0"
+variable	lb   equal "v_x1 - 30.0"
+variable	mid  equal "0.5*(v_x1+v_xo)"
+variable	lsrc equal "v_mid - 50.0"
+variable	rsrc equal "v_mid + 50.0"
+
+variable 	Edensity	equal   "1.25"												# Energy density 	
+variable	SpotRadius	equal 	"7.5"												# Do not change this value unless changed in Function.h
+variable	SpotSpeed   equal   "20.0"												# Weld speed
+variable 	Fluence		equal   "(v_SpotSpeed * v_Edensity)/1.036e-4"				# Laser Power, based on energy density in this code -- units: MLT, the constant is a conversion factor
+variable 	ys   		equal   "v_yo+v_SpotRadius"									# Starting position of spot in y-axis
+variable	SpotLocate	equal   "v_ys+v_SpotSpeed*dt*step"							# To move the compute region
+variable	PenDepth	equal   "142.5"												# Thermal Penetration Depth
+variable	runcalc		equal 	"(((v_y1-(v_ys+v_SpotRadius))/v_SpotSpeed)/dt)"		# To calculate run time
+variable    runstep     equal 	"round(v_runcalc)"									# Round off runcalc 	
+variable	dumpint		equal	"round(v_runstep/10)"								# Dump interval to dump 10 files
+
+# Deine mesh region
+
+region		MeshReg block ${xo} ${x1} ${yo} ${y1} ${zo} ${z1} units box 
+group		FEMesh	region MeshReg
+
+# ATC package usage (Must install User-ATC and use my customized Function.h and Function.cpp files)
+# keep the boundary fff to be consistent with refelctive walls 
+
+fix         AtC FEMesh atc two_temperature cu_ttm.mat
+fix_modify  AtC mesh create 50 15 15 MeshReg f f f	
+fix_modify  AtC decomposition distributed_memory
+fix_modify  AtC mesh write mesh.dat
+
+# Setup initial conditions and relaxation dynamics 
+
+fix_modify  AtC  initial   temperature      	   all 300.0
+fix_modify  AtC  fix 	   temperature             all 300.0
+fix_modify  AtC  initial   electron_temperature    all 300.0 
+fix_modify  AtC  fix       electron_temperature    all 300.0 
+
+fix_modify  AtC  extrinsic exchange off
+fix_modify  AtC  control   tolerance 1e-8
+
+# Equillibrate for consistent mesh and atoms temperatures (short times are enough)
+
+thermo 			100
+thermo_style 	custom step lx ly lz press pe etotal ke f_AtC[1] f_AtC[3] temp f_AtC[2] f_AtC[4] cpuremain
+run 			500
+reset_timestep	0
+
+# Start E-P exchange, set up b.c's, and setup necessary computes
+
+# Regions, groups and computes
+
+region			 LaserSpot	  cylinder z ${mid} ${ys} ${SpotRadius} ${zo} ${PenDepth} units box move NULL v_SpotLocate NULL
+
+region			 OutHAZ		  block ${lsrc} ${rsrc} ${yo} ${y1} ${zo} ${z1} units box side out 
+group			 OutHAZAtms   region OutHAZ
+
+compute 		 LaserTemp 	  all  temp/region LaserSpot
+compute 		 OutHAZTemp	  OutHAZAtms temp
+compute 		 atomPE all pe/atom
+
+# Setup before b.c and model (If using my source function in the customized Function.h, zhi for the source elementset MUST be equal to pen.Depth and zlo cannot be below zero)
+
+fix_modify AtC   mesh create_elementset src ${lsrc} ${rsrc}  ${yo} ${y1} ${zo} ${PenDepth}
+
+fix_modify AtC   mesh create_nodeset    lbc ${xo} ${rb} ${yo} ${y1} ${zo} ${z1}
+fix_modify AtC   mesh create_nodeset    rbc ${lb} ${x1} ${yo} ${y1} ${zo} ${z1}
+
+# Parameters are below (it is not sine function! but it was easier to keep original names in Function.h)
+# You can modify the function to change the parameters below. I wanted to vary the velocity & enregy and keep the radius constant 
+# The x y z must be 1 1 1.
+# The source is found here: 10.1007/s10973-012-2486-0
+#													     xo    yo   zo   x y z      P         speed 	  depth	
+fix_modify AtC   source electron_temperature src sine ${mid} ${ys} ${zo} 1 1 1 ${Fluence} ${SpotSpeed} ${PenDepth} 
+
+fix_modify AtC   unfix 		  temperature all
+fix_modify AtC   unfix  	  electron_temperature all
+fix_modify AtC   control      thermal flux	
+fix_modify AtC   extrinsic    exchange on	
+fix_modify AtC   output       CuWeld 500 text binary 	# Be aware of large sizes
+
+# b.c's (Fixed x-sides at 300K)
+
+fix_modify AtC 	 fix electron_temperature lbc 300.0
+fix_modify AtC 	 fix electron_temperature rbc 300.0
+fix_modify AtC 	 fix temperature 		  lbc 300.0
+fix_modify AtC 	 fix temperature 		  rbc 300.0
+
+# Visualization Output
+
+dump 			1 all cfg ${dumpint} Weld_*.cfg mass type xs ys zs id  c_atomPE
+dump_modify 	1 element Cu
+
+# Run the FE Code - FE default mode is serial :(
+
+thermo	100
+thermo_style custom step lx ly lz pe etotal ke f_AtC[1] f_AtC[3] temp f_AtC[2] f_AtC[4] c_LaserTemp c_OutHAZTemp v_SpotLocate cpuremain
+
+run		${runstep}	# Calculate the suitable run using speed and location of spot 
+undump	1
+reset_timestep	0
+
+# Remove source and cool
+
+fix_modify AtC 	 remove_source electron_temperature src
+
+# Turn Off E-P Exchange and FE-MD coupling for lattice cooling 
+
+variable 		chetemp	equal "f_AtC[4]"
+variable		tmp		equal "f_AtC[2]"
+variable 		chtemp	equal ${tmp}
+
+fix_modify  	AtC   extrinsic exchange off
+fix_modify 		AtC   control   thermal  none	
+
+write_data		AF_Weld${SpotSpeed}.dat

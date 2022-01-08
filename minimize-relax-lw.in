@@ -1,0 +1,109 @@
+# Code for modeling direct bonding using continous laser
+# Prepared by Khaled Badawy Nov 2020
+# Minimize Initial Structure and relax it to room temp
+
+############################### BEGIN ##################################
+
+units			metal
+dimension		3
+boundary 		p p p	
+package 		gpu 8 neigh no
+
+######################## GEOMETRY DEFINITION ###########################
+
+region			SimBox block 10 821 10 310 10 310 units box
+create_box		2 SimBox
+
+region			CuSideLhs block  10 410 10 310 10 310 units box
+lattice 		fcc 3.6150 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
+create_atoms	2 region CuSideLhs
+
+region			CuSideRhs block  411 811 10 310 10 310 units box
+lattice 		fcc 3.6150 orient x 1 1 0 orient y -1 1 0 orient z 0 0 2
+create_atoms	2 region CuSideRhs
+
+############################# POTENTIAL ################################
+
+pair_style 		eam/alloy/gpu
+pair_coeff 		* * al-cu-set.eam.alloy Al Cu
+
+############################### MINIMIZATION ###########################
+
+variable		tol			equal 	1e-10
+variable		iter		equal	1000000
+
+print 			"========================================="
+print 			"Mnimization Started"
+print 			"========================================="
+
+compute 		atomPE all pe/atom
+
+thermo 			100
+thermo_style	custom step lx ly lz temp vol press pe fmax cpuremain
+
+dump 			1 all cfg 5000 Minimized_*.cfg mass type xs ys zs id c_atomPE 
+dump_modify 	1 element Al Cu
+
+fix 			1 all box/relax iso 0.0
+minimize		${tol} ${tol} ${iter} ${iter}
+
+write_data		Minimized.dat	
+
+unfix			1
+undump			1
+
+############################### START RELAX ###########################
+
+variable 		het equal  30000
+variable 		eqr equal  10000
+variable 		Temp equal 300.0
+
+print 			"========================================="
+print 			"Relax Stage: 1"
+print 			"========================================="
+
+timestep 		0.001
+
+velocity 		all create 1.0 61513 mom yes rot no 
+fix 			NPT all npt temp 1.0 ${Temp} 0.1 iso 0 0 1.0
+
+thermo 			500
+thermo_style	custom step lx ly lz vol temp press pe ke etotal cpuremain
+
+run 			${het}
+
+unfix 			NPT
+
+dump 			1 all cfg 1 RT_*.cfg mass type xs ys zs id 
+dump_modify 	1 element Al Cu
+run				0
+undump   		1
+
+############################### Second Relaxation #####################
+
+print 			"========================================="
+print 			"Relax Stage: 2"
+print 			"========================================="
+
+velocity 		all scale ${Temp}
+fix 			NPT all npt temp ${Temp} ${Temp} 0.01 iso 0 0 1.0
+
+thermo 			500
+thermo_style	custom step lx ly lz vol temp press pe ke etotal cpuremain
+
+run 			${eqr}
+
+unfix 			NPT
+
+# Output Relaxed Structure
+
+change_box 		all boundary s s s
+change_box 		all boundary p p p
+
+dump 			1 all cfg 1 RT_*.cfg mass type xs ys zs id 
+dump_modify 	1 element Al Cu
+run				0
+undump			1
+write_data		Relaxed.dat	
+
+#######################################################################
