@@ -6,7 +6,7 @@ Codes used in "A multiscale approach for modeling metal laser welding" https://d
 
 - The proposed scheme allows the proper description of heat transfer in metals during laser welding and gives insights into the structure evolution of the lattice during the process. Please refer to the paper for detailed explanations.  
 
-- You need to have a data file that is relaxed at some temperature (here at 300K). I provided a relaxation for fast reproduction of the results. 
+- You need to have a data file that is relaxed at some temperature (here at 300K). I provided a relaxation code for fast reproduction of the results. 
 
 - This model can be used with CPU only. However, I found that using GPU gives you 8 times the computation speed. I do understand that some potentials cannot use GPU. It is simple to remove the gpu setup in the code and it does not interfere with the dynamics of the run.
 
