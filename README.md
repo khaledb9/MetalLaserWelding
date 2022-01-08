@@ -10,6 +10,6 @@ Codes used in "A multiscale approach for modeling metal laser welding" https://d
 
 - This model can be used with CPU only. However, I found that using GPU gives you 5 times the computation speed ! I do understand that some potentials cannot use GPU. It is simple to remove the gpu setup in the code and it does not interfere with the dynamics of the simulation.
 
-- Note that you MUST use the provided function.cpp and function.h and rebuild lammps because they contain the function that represents the 3D laser beam described in the paper. 
+- Note that you MUST use the provided function.cpp and function.h in the lib/atc folder and rebuild lammps because they contain the function that represents the 3D laser beam described in the paper. 
 
 - Enough details are provided in the comments of the code. Feel free to contact me regarding any questions!
