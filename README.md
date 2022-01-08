@@ -2,7 +2,7 @@
 
 Codes used in "A multiscale approach for modeling metal laser welding" https://doi.org/10.1063/5.0043764
 
-- The idea of this code is to model metal laser welding and take into account the fast heating rates of electrons and correct the models performing the welding purely  on the MD lattice, skipping the high thermal conductivity and low heat capacity of electrons in metals.
+- The idea of this code is to model metal laser welding considering the fast heating rates of electrons and correct the models performing the welding purely  on the MD lattice, skipping the high thermal conductivity and low heat capacity of electrons in metals.
 
 - The proposed scheme allows the proper description of heat transfer in metals during laser welding and gives insights into the structure evolution of the lattice during the process. Please refer to the paper for detailed explanations.  
 
