@@ -8,7 +8,7 @@ Codes used in "A multiscale approach for modeling metal laser welding" https://d
 
 - You need to have a data file that is relaxed at some temperature (here at 300K). I provided a relaxation code for fast reproduction of the results. 
 
-- This model can be used with CPU only. However, I found that using GPU gives you 8 times the computation speed. I do understand that some potentials cannot use GPU. It is simple to remove the gpu setup in the code and it does not interfere with the dynamics of the run.
+- This model can be used with CPU only. However, I found that using GPU gives you 5 times the computation speed ! I do understand that some potentials cannot use GPU. It is simple to remove the gpu setup in the code and it does not interfere with the dynamics of the run.
 
 - Note that you MUST use the provided function.cpp and function.h and rebuild lammps because they contain the function that represents the 3D laser beam described in the paper. 
 
